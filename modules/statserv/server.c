@@ -20,13 +20,13 @@ command_t ss_server =
 { "SERVER", N_("Obtain information about servers on the network."), AC_NONE, 3, ss_cmd_server, {.path = "statserv/server"} };
 
 command_t ss_server_list =
-{ "LIST", N_("Obtain a list of servers."), PRIV_SERVER_AUSPEX, 1, ss_cmd_server_list, {.path = ""} };
+{ "LIST", N_("Obtain a list of servers."), AC_NONE, 1, ss_cmd_server_list, {.path = ""} };
 
 command_t ss_server_count =
 { "COUNT", N_("Count the amount of servers connected to the network."), AC_NONE, 1, ss_cmd_server_count, {.path = ""} };
 
 command_t ss_server_info = 
-{ "INFO", N_("Obtain information about a specified server."),  PRIV_SERVER_AUSPEX, 2, ss_cmd_server_info, {.path = ""} };
+{ "INFO", N_("Obtain information about a specified server."), AC_NONE, 2, ss_cmd_server_info, {.path = ""} };
 
 mowgli_patricia_t *ss_server_cmds;
 
@@ -80,8 +80,11 @@ static void ss_cmd_server_list(sourceinfo_t * si, int parc, char *parv[])
     mowgli_patricia_iteration_state_t state;
     MOWGLI_PATRICIA_FOREACH(s, &state, servlist)
     {
-        i++;
-        command_success_nodata(si, _("%d: %s [%s]"), i, s->name, s->desc);
+        if ((!(s->flags & SF_HIDE)) || (has_priv(si, PRIV_SERVER_AUSPEX)))
+        {
+            i++;
+            command_success_nodata(si, _("%d: %s [%s]"), i, s->name, s->desc);
+        }
     }
     command_success_nodata(si, _("End of server list."));
 }
@@ -104,13 +107,22 @@ static void ss_cmd_server_info(sourceinfo_t * si, int parc, char *parv[])
         return;
     }
 
+    if ((s->flags & SF_HIDE) && (!(has_priv(si, PRIV_SERVER_AUSPEX))))
+    {
+        command_fail(si, fault_nosuch_target, _("Server \2%s\2 does not exist."), name);
+        return;
+    }
+
     command_success_nodata(si, _("Information for server %s:"), s->name);
     command_success_nodata(si, _("Server description: %s"), s->desc);
     command_success_nodata(si, _("Current users: %u (%u invisible)"), s->users, s->invis);
     command_success_nodata(si, _("Online operators: %u"), s->opers);
-    if (s->uplink != NULL && s->uplink->name != NULL)
-        command_success_nodata(si, _("Server uplink: %s"), s->uplink->name);
-    command_success_nodata(si, _("Servers linked from %s: %u"), name, (unsigned int)s->children.count);
+    if (has_priv(si, PRIV_SERVER_AUSPEX))
+    {
+        if (s->uplink != NULL && s->uplink->name != NULL)
+            command_success_nodata(si, _("Server uplink: %s"), s->uplink->name);
+        command_success_nodata(si, _("Servers linked from %s: %u"), name, (unsigned int)s->children.count);
+    }
     command_success_nodata(si, _("End of server info."));
 }
 
